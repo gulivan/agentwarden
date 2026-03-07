@@ -12,6 +12,7 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
+    "types": ["node", "bun-types"],
 
     // Path mapping
     "baseUrl": "./src",

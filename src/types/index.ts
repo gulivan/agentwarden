@@ -7,3 +7,6 @@ export interface AgentWardenOptions {
   config?: Config;
   version?: string;
 }
+
+export * from '../providers/types.js';
+export * from '../secrets/types.js';
