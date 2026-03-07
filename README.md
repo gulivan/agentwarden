@@ -1,152 +1,97 @@
 # Agent Warden
 
-A Bun CLI for scanning local AI agent session storage for exposed secrets and masking them when needed.
+Fully local CLI that scans AI agent sessions for exposed secrets and masks them in place. No external connections.
+
+Supports **Claude Code**, **Codex**, **Gemini CLI**, and **OpenCode** session storage.
 
 ## Installation
 
 ```bash
-bun install
+# Run without installing
+npx agentwarden@latest scan
+
+# Install globally
+npm install -g agentwarden
 ```
 
-## Development
+## Usage
+
+### `scan` — Find exposed secrets
+
+Scans local session files and reports findings. Running without flags opens an interactive wizard where you pick providers, finding types, and output options.
 
 ```bash
-bun run dev
+# Interactive wizard
+agentwarden scan
+
+# Skip wizard, scan everything
+agentwarden scan --direct
+
+# Scan specific providers with masked samples
+agentwarden scan --direct --agents codex,claude --samples
+
+# Only high-confidence finding types
+agentwarden scan --direct --types high_precision
+
+# JSON output
+agentwarden scan --direct --json
 ```
 
-## Build
+<details>
+<summary>All scan flags</summary>
+
+| Flag | Description |
+| --- | --- |
+| `--agent <name>` | Scan one provider |
+| `--agents <list>` | Comma-separated providers |
+| `--details` | Per-session breakdown table |
+| `--samples` | Show masked sample values |
+| `--raw-samples` | Show unmasked values (sensitive) |
+| `--types <list>` | Only these finding types or groups |
+| `--exclude-types <list>` | Skip these finding types or groups |
+| `--json` | JSON output |
+| `--direct` | Skip interactive wizard |
+| `--interactive` | Force wizard even when flags are set |
+
+</details>
+
+Saved reports go to `~/.agentwarden/reports` (owner-only permissions).
+
+### `mask_secrets` — Redact secrets on disk
+
+Detects findings and overwrites them with masked values. Backups are saved to `~/.agentwarden/backups/` by default.
 
 ```bash
-bun run build
+# Preview changes
+agentwarden mask_secrets --dry-run
+
+# Mask everything
+agentwarden mask_secrets
+
+# Mask only API keys for one provider
+agentwarden mask_secrets --agent gemini --types api_keys
 ```
 
-## Commands
+<details>
+<summary>All mask_secrets flags</summary>
 
-### Scan sessions
+| Flag | Description |
+| --- | --- |
+| `--agent <name>` | Mask one provider |
+| `--agents <list>` | Comma-separated providers |
+| `--dry-run` | Preview without writing |
+| `--no-backup` | Skip backup |
+| `--types <list>` | Only these finding types or groups |
+| `--exclude-types <list>` | Skip these finding types or groups |
 
-`scan` reads local session data, checks it for exposed values, and prints a report.
-By default it checks all finding types and shows a high-level summary:
-
-- totals across all scanned sessions
-- findings by provider
-- findings by type
-- top sessions with the most findings
-
-When you run `scan` in a terminal with no filters, Agent Warden opens an interactive wizard with keyboard selectors. Use `↑` / `↓` to move, `space` to toggle multi-select rows, and `enter` to continue. The wizard lets you:
-
-1. select all clients or a subset of clients
-2. select all finding types or a custom mix of groups and individual types
-3. choose whether to show no values, masked examples, or raw values in the report
-4. run the scan, then optionally show aggregate spotted stats, save the report to a file, and mask findings
-
-Use `--details` when you want the per-session per-type breakdown table.
-Use `--samples` when you want masked example values in the output. Samples are already redacted and usually keep only a safe beginning and ending, like `sk-ant****9xyz`.
-Use `--direct` to skip the interactive wizard.
-
-Saved reports go to `~/.agentwarden/reports`. Agent Warden creates that directory with owner-only permissions. If you choose `--raw-samples`, any saved report will contain those raw values too.
-
-```bash
-bun run src/index.ts scan
-```
-
-Useful flags:
-
-- `--agent <agent>`: scan only one provider (`codex`, `claude`, `gemini`, `opencode`)
-- `--agents <agents>`: scan a comma-separated list of providers
-- `--json`: emit JSON output
-- `--details`: include the per-session breakdown table
-- `--samples`: show masked sample values for findings
-- `--raw-samples`: show unmasked sample values in the report (sensitive)
-- `--types <types>`: only check specific finding types or preset groups
-- `--exclude-types <types>`: skip specific finding types or preset groups
-- `--interactive`: force the wizard even when flags are present
-- `--direct`: skip the wizard and scan immediately
-
-Examples:
-
-```bash
-# Launch the interactive scan wizard
-bun run src/index.ts scan
-
-# Skip the wizard and scan everything with the default summary report
-bun run src/index.ts scan --direct
-
-# Scan only Codex sessions
-bun run src/index.ts scan --direct --agent codex
-
-# Scan multiple providers
-bun run src/index.ts scan --direct --agents codex,claude
-
-# Only check for emails and JWTs
-bun run src/index.ts scan --direct --types email,jwt
-
-# Use preset groups
-bun run src/index.ts scan --direct --types api_keys,user_data --samples
-
-# Use the lower-noise preset
-bun run src/index.ts scan --direct --types high_precision
-
-# Show raw values instead of masked samples
-bun run src/index.ts scan --direct --raw-samples
-
-# Check everything except usernames in paths and emails
-bun run src/index.ts scan --direct --exclude-types path_username,email
-
-# Show the detailed per-session breakdown with samples
-bun run src/index.ts scan --direct --details --samples
-
-# Produce machine-readable JSON
-bun run src/index.ts scan --direct --json
-```
-
-### Mask secrets
-
-`mask_secrets` loads sessions, detects findings, and writes masked values back to disk.
-By default it checks all finding types before masking. Use `--dry-run` to preview what would change.
-When backups are enabled, Agent Warden stores them under `~/.agentwarden/backups/<timestamp>-mask_secrets` and writes a `manifest.json` alongside them.
-
-```bash
-bun run src/index.ts mask_secrets
-```
-
-Useful flags:
-
-- `--agent <agent>`: mask only one provider
-- `--agents <agents>`: mask a comma-separated list of providers
-- `--dry-run`: show planned changes without writing
-- `--no-backup`: disable backups before writes
-- `--types <types>`: only mask findings of specific types or preset groups
-- `--exclude-types <types>`: skip specific finding types or preset groups
-
-Examples:
-
-```bash
-# Preview changes without writing anything
-bun run src/index.ts mask_secrets --dry-run
-
-# Only mask auth headers and raw tokens
-bun run src/index.ts mask_secrets --types authorization_header,raw_token
-
-# Mask a preset group
-bun run src/index.ts mask_secrets --types user_data
-
-# Mask everything except emails
-bun run src/index.ts mask_secrets --exclude-types email
-
-# Only mask one provider
-bun run src/index.ts mask_secrets --agent gemini
-
-# Mask multiple providers
-bun run src/index.ts mask_secrets --agents codex,claude
-```
+</details>
 
 ## Finding types
 
-Type filtering is configurable. If you do not pass `--types` or `--exclude-types`, Agent Warden checks all finding types.
+By default all types are checked. Use `--types` or `--exclude-types` to filter.
 
-### Preset groups
-
-You can use these group names anywhere you use `--types` or `--exclude-types`, and they are also available in the interactive scan wizard:
+<details>
+<summary>Preset groups</summary>
 
 | Group | Includes |
 | --- | --- |
@@ -156,21 +101,37 @@ You can use these group names anywhere you use `--types` or `--exclude-types`, a
 | `credentials` | `url_credentials`, `private_key` |
 | `user_data` | `path_username`, `email` |
 
-### Individual types
+</details>
 
-| Type | Description | Example |
-| --- | --- | --- |
-| `secret_assignment` | Sensitive-looking keys assigned directly to a value, such as API keys, tokens, passwords, authorization values, or cookies. | ``api_key=sk-example1234567890`` |
-| `authorization_header` | `Authorization` or `Proxy-Authorization` header values that use `Bearer`, `Basic`, or `Token`. | ``Authorization: Bearer sk-example1234567890`` |
-| `cookie` | `Cookie` or `Set-Cookie` header values that may contain session IDs or other secrets. | ``Cookie: session_token=abc123def456ghi789`` |
-| `url_credentials` | Credentials embedded directly in a URL before the host, such as `user:password@`. | ``https://alice:super-secret@example.com/private`` |
-| `signed_query` | Sensitive query parameter values such as `access_token`, `api_key`, `signature`, `x-amz-signature`, or `x-goog-signature`. | ``https://example.com/download?access_token=tok_example_1234567890`` |
-| `basic_auth` | Base64 credentials inside an HTTP Basic auth header. | ``Authorization: Basic YWxhZGRpbjpvcGVuc2VzYW1l`` |
-| `base64_secret` | Standalone Base64 text that decodes to secret-looking content such as `token=...`, `password:...`, or `client_secret=...`. | ``dG9rZW49c2stZXhhbXBsZTEyMzQ1Ng==`` |
-| `private_key` | PEM-formatted private keys such as RSA, EC, DSA, OpenSSH, or PGP private key blocks. | ``-----BEGIN PRIVATE KEY-----`` |
-| `jwt` | JSON Web Tokens with the usual three-part `header.payload.signature` format. | ``eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJlMTIz`` |
-| `raw_token` | Known token formats from common providers, such as OpenAI, Anthropic, GitHub, Google, or Slack. | ``ghp_1234567890abcdefghijklmnop`` |
-| `path_username` | Usernames exposed in local filesystem paths such as `/Users/name`, `/home/name`, or `C:\Users\name`. | ``/Users/alice/.codex/sessions`` |
-| `email` | Email addresses found in session content. | ``alice@example.com`` |
+<details>
+<summary>Individual types</summary>
 
-These examples are illustrative only. Actual findings can appear inside JSON, logs, prompts, headers, nested strings, or other session text.
+| Type | Description |
+| --- | --- |
+| `secret_assignment` | API keys, tokens, or passwords assigned to a variable |
+| `authorization_header` | Bearer/Basic/Token auth headers |
+| `cookie` | Cookie or Set-Cookie header values |
+| `url_credentials` | `user:password@host` in URLs |
+| `signed_query` | Sensitive query params (`access_token`, `api_key`, signatures) |
+| `basic_auth` | Base64 credentials in Basic auth |
+| `base64_secret` | Base64 text that decodes to secret-looking content |
+| `private_key` | PEM-formatted private keys |
+| `jwt` | JSON Web Tokens |
+| `raw_token` | Known token formats (OpenAI, Anthropic, GitHub, Google, Slack, etc.) |
+| `path_username` | Usernames in filesystem paths |
+| `email` | Email addresses |
+
+</details>
+
+## Development
+
+```bash
+bun install
+bun run dev           # watch mode
+bun run build         # production build
+bun run src/index.ts  # run directly
+```
+
+## License
+
+MIT
