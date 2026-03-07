@@ -1,6 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { expandHomeDir, pathExists } from '../io/paths.js';
+import { expandHomeDir, pathExists, resolvePathInsideDirectory } from '../io/paths.js';
 import { createJsonlArtifact } from './helpers.js';
 import type { ProviderDiscoveryResult, ProviderReader, SessionHandle } from './types.js';
 
@@ -63,6 +63,7 @@ export const claudeProvider: ProviderReader = {
       }
 
       const projectPath = path.join(projectsRoot, projectEntry.name);
+      const resolvedProjectPath = path.resolve(projectPath);
       const hintMap = new Map<string, ClaudeIndexEntry>();
       const indexPath = path.join(projectPath, 'sessions-index.json');
 
@@ -87,7 +88,7 @@ export const claudeProvider: ProviderReader = {
           continue;
         }
 
-        const filePath = path.join(projectPath, siblingEntry.name);
+        const filePath = path.resolve(projectPath, siblingEntry.name);
         discoveredPaths.add(filePath);
         const sessionId = path.basename(siblingEntry.name, '.jsonl');
         const hint = hintMap.get(sessionId);
@@ -105,7 +106,27 @@ export const claudeProvider: ProviderReader = {
           continue;
         }
 
-        const filePath = path.isAbsolute(hint.fullPath) ? hint.fullPath : path.join(projectPath, hint.fullPath);
+        const filePath = resolvePathInsideDirectory(resolvedProjectPath, hint.fullPath);
+
+        if (filePath === undefined) {
+          warnings.push({
+            provider: 'claude',
+            level: 'warning',
+            sessionId: hint.sessionId,
+            message: `Ignoring out-of-project session path from ${indexPath}: ${hint.fullPath}`,
+          });
+          continue;
+        }
+
+        if (!filePath.endsWith('.jsonl')) {
+          warnings.push({
+            provider: 'claude',
+            level: 'warning',
+            sessionId: hint.sessionId,
+            message: `Ignoring non-JSONL session path from ${indexPath}: ${hint.fullPath}`,
+          });
+          continue;
+        }
 
         if (discoveredPaths.has(filePath) || !(await pathExists(filePath))) {
           continue;

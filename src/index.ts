@@ -3,13 +3,12 @@
 import { Command, InvalidArgumentError } from 'commander';
 import { maskSecretsCommand } from './commands/mask_secrets.js';
 import { scanCommand } from './commands/scan.js';
-import { startCommand } from './commands/start.js';
-import { statusCommand } from './commands/status.js';
 import { isAgentProvider, orderAgentProviders } from './providers/index.js';
 import { AGENT_PROVIDERS, type AgentProvider } from './providers/types.js';
 import { expandSecretFilterTokens, formatSecretFilterChoices } from './secrets/catalog.js';
 import { type SecretType } from './secrets/types.js';
 
+const packageMetadata = (await Bun.file(new URL('../package.json', import.meta.url)).json()) as { version?: string };
 const program = new Command();
 
 function parseAgentProvider(value: string): AgentProvider {
@@ -63,16 +62,7 @@ function parseSecretTypes(value: string, previous: SecretType[] = []): SecretTyp
 program
   .name('agentwarden')
   .description('Agent Warden CLI - A TypeScript CLI application')
-  .version('1.0.0');
-
-program
-  .command('start')
-  .description('Start the Agent Warden service')
-  .option('-p, --port <port>', 'port to run on', '3000')
-  .option('-v, --verbose', 'verbose output')
-  .action(startCommand);
-
-program.command('status').description('Check the status of Agent Warden service').action(statusCommand);
+  .version(packageMetadata.version ?? '0.0.0');
 
 program
   .command('scan')

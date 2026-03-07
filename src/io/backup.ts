@@ -1,7 +1,14 @@
-import { copyFile, stat, writeFile } from 'node:fs/promises';
+import { copyFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { SessionArtifact } from '../providers/types.js';
-import { buildUtcTimestamp, ensureDir, expandHomeDir, toBackupRelativePath } from './paths.js';
+import {
+  buildUtcTimestamp,
+  chmodPrivateFile,
+  ensurePrivateDir,
+  expandHomeDir,
+  toBackupRelativePath,
+  writePrivateFile,
+} from './paths.js';
 import { createSqliteBackup } from './sqlite.js';
 
 export interface BackupManifestEntry {
@@ -23,7 +30,7 @@ function defaultBackupRoot(): string {
 }
 
 async function backupTarget(target: { kind: 'file' | 'sqlite'; path: string }, destinationPath: string): Promise<void> {
-  await ensureDir(path.dirname(destinationPath));
+  await ensurePrivateDir(path.dirname(destinationPath));
 
   if (target.kind === 'sqlite') {
     await createSqliteBackup(target.path, destinationPath);
@@ -31,11 +38,12 @@ async function backupTarget(target: { kind: 'file' | 'sqlite'; path: string }, d
   }
 
   await copyFile(target.path, destinationPath);
+  await chmodPrivateFile(destinationPath);
 }
 
 export async function createBackups(artifacts: SessionArtifact[], backupRoot = defaultBackupRoot()): Promise<BackupResult> {
   try {
-    await ensureDir(backupRoot);
+    await ensurePrivateDir(backupRoot);
 
     const entries: BackupManifestEntry[] = [];
     const seenTargets = new Map<string, string>();
@@ -62,10 +70,9 @@ export async function createBackups(artifacts: SessionArtifact[], backupRoot = d
     }
 
     const manifestPath = path.join(backupRoot, 'manifest.json');
-    await writeFile(
+    await writePrivateFile(
       manifestPath,
       `${JSON.stringify({ createdAt: new Date().toISOString(), root: backupRoot, entries }, null, 2)}\n`,
-      'utf8',
     );
 
     return { root: backupRoot, manifestPath, entries };

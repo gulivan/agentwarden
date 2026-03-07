@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { Database } from 'bun:sqlite';
-import { ensureDir } from './paths.js';
+import { chmodPrivateFile, ensurePrivateDir } from './paths.js';
 
 export interface OpenSqliteOptions {
   readonly?: boolean;
@@ -24,7 +24,7 @@ export function openSqliteDatabase(databasePath: string, options: OpenSqliteOpti
 }
 
 export async function createSqliteBackup(databasePath: string, backupPath: string): Promise<void> {
-  await ensureDir(path.dirname(backupPath));
+  await ensurePrivateDir(path.dirname(backupPath));
   const database = openSqliteDatabase(databasePath, { readonly: false, create: false, busyTimeoutMs: 500 });
 
   try {
@@ -32,6 +32,8 @@ export async function createSqliteBackup(databasePath: string, backupPath: strin
   } finally {
     database.close();
   }
+
+  await chmodPrivateFile(backupPath);
 }
 
 export function isSqliteLockedError(error: unknown): boolean {

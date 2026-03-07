@@ -1,6 +1,7 @@
-import type { SessionArtifact } from '../providers/types.js';
-import { buildMaskedValue, findingsForField } from './detector.js';
+import type { SessionArtifact, StringFieldRef } from '../providers/types.js';
+import { buildMaskedValue } from './detector.js';
 import type { DetectionOptions } from './options.js';
+import type { DetectionSpan } from './types.js';
 import type { AnalysisResult, AnalyzedSession, FindingGroup, SessionFinding, SpottedEntry } from './types.js';
 
 export interface AnalysisAccumulatorOptions {
@@ -32,35 +33,64 @@ function createProviderSummary(): AnalysisResult['summary']['providers'] {
   };
 }
 
+function toSessionFindings(
+  artifact: SessionArtifact,
+  field: StringFieldRef,
+  spans: readonly DetectionSpan[],
+): SessionFinding[] {
+  return spans.map((span) => ({
+    provider: artifact.handle.provider,
+    sessionId: artifact.handle.sessionId,
+    type: span.type,
+    fieldId: field.id,
+    fieldPath: field.path,
+    sourceLabel: field.sourceLabel,
+    preview: span.preview,
+    rawSample: span.rawValue,
+    fingerprint: span.fingerprint,
+    maskPolicy: field.maskPolicy,
+  }));
+}
+
+function canConditionallyMask(fieldValue: string, spans: readonly DetectionSpan[]): boolean {
+  if (spans.length !== 1) {
+    return false;
+  }
+
+  const span = spans[0];
+
+  if (span === undefined) {
+    return false;
+  }
+
+  const remainder = `${fieldValue.slice(0, span.start)}${fieldValue.slice(span.end)}`;
+  return /^[\s"'`]*$/.test(remainder);
+}
+
+function shouldCreateFieldPlan(field: StringFieldRef, spans: readonly DetectionSpan[]): boolean {
+  if (spans.length === 0 || field.maskPolicy === 'report_only') {
+    return false;
+  }
+
+  if (field.maskPolicy === 'conditional') {
+    return canConditionallyMask(field.value, spans);
+  }
+
+  return true;
+}
+
 function analyzeArtifact(artifact: SessionArtifact, detectionOptions?: DetectionOptions): AnalyzedSession {
-  const findings = artifact.fields.flatMap((field) => findingsForField(artifact.handle, field, detectionOptions));
-  const findingsByFieldId = new Map<string, SessionFinding[]>();
-
-  findings.forEach((finding) => {
-    const current = findingsByFieldId.get(finding.fieldId);
-
-    if (current === undefined) {
-      findingsByFieldId.set(finding.fieldId, [finding]);
-      return;
-    }
-
-    current.push(finding);
-  });
-
+  const findings: SessionFinding[] = [];
   const fieldPlans = artifact.fields.flatMap((field) => {
-    const fieldFindings = findingsByFieldId.get(field.id) ?? [];
+    const maskedField = buildMaskedValue(field, detectionOptions);
+    const fieldFindings = toSessionFindings(artifact, field, maskedField.findings);
+    findings.push(...fieldFindings);
 
-    if (fieldFindings.length === 0 || field.maskPolicy === 'report_only') {
+    if (!shouldCreateFieldPlan(field, maskedField.findings) || maskedField.nextValue === field.value) {
       return [];
     }
 
-    const { nextValue } = buildMaskedValue(field, detectionOptions);
-
-    if (nextValue === field.value) {
-      return [];
-    }
-
-    return [{ field, findings: fieldFindings, nextValue }];
+    return [{ field, findings: fieldFindings, nextValue: maskedField.nextValue }];
   });
 
   return { artifact, findings, fieldPlans };

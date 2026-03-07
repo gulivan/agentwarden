@@ -1,7 +1,7 @@
 import { unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { writeJsonFile } from '../io/json.js';
-import { expandHomeDir, pathExists } from '../io/paths.js';
+import { expandHomeDir, isSafePathSegment, joinSafePathSegment, pathExists } from '../io/paths.js';
 import { isSqliteLockedError, openSqliteDatabase } from '../io/sqlite.js';
 import { collectStringFields, listFilesRecursive } from './helpers.js';
 import type {
@@ -65,8 +65,14 @@ function getOpenCodeStorageRoot(): string {
   return path.join(getOpenCodeRoot(), 'storage');
 }
 
-function getOpenCodeCachePath(sessionId: string): string {
-  return expandHomeDir(`~/.ccbox/opencode/sessions/${sessionId}.jsonl`);
+function getOpenCodeCachePath(sessionId: string): string | undefined {
+  const cacheRoot = expandHomeDir('~/.ccbox/opencode/sessions');
+
+  if (!isSafePathSegment(sessionId)) {
+    return undefined;
+  }
+
+  return path.join(cacheRoot, `${sessionId}.jsonl`);
 }
 
 function normalizeString(value: unknown): string | undefined {
@@ -264,9 +270,17 @@ async function loadStorageSession(handle: SessionHandle): Promise<SessionArtifac
 
   const messageStates: JsonFileState[] = [];
   const partStates: JsonFileState[] = [];
-  const messageRoot = path.join(storageRoot, 'message', handle.sessionId);
+  const messageParentRoot = path.join(storageRoot, 'message');
+  const messageRoot = joinSafePathSegment(messageParentRoot, handle.sessionId);
 
-  if (await pathExists(messageRoot)) {
+  if (messageRoot === undefined) {
+    warnings.push({
+      provider: 'opencode',
+      level: 'warning',
+      sessionId: handle.sessionId,
+      message: `Skipping message files because the session id is not a safe path segment: ${handle.sessionId}`,
+    });
+  } else if (await pathExists(messageRoot)) {
     const messageFiles = (await listFilesRecursive(messageRoot, '.json')).sort((left, right) => left.localeCompare(right));
 
     for (const filePath of messageFiles) {
@@ -298,7 +312,18 @@ async function loadStorageSession(handle: SessionHandle): Promise<SessionArtifac
   for (const messageState of messageStates) {
     const messageRecord = toRecord(messageState.parsed);
     const messageId = normalizeString(messageRecord?.id) ?? path.basename(messageState.filePath, '.json');
-    const partRoot = path.join(storageRoot, 'part', messageId);
+    const partParentRoot = path.join(storageRoot, 'part');
+    const partRoot = joinSafePathSegment(partParentRoot, messageId);
+
+    if (partRoot === undefined) {
+      warnings.push({
+        provider: 'opencode',
+        level: 'warning',
+        sessionId: handle.sessionId,
+        message: `Skipping part files because the message id is not a safe path segment: ${messageId}`,
+      });
+      continue;
+    }
 
     if (!(await pathExists(partRoot))) {
       continue;
@@ -533,10 +558,14 @@ async function loadSqliteSession(handle: SessionHandle): Promise<SessionArtifact
           writeDatabase.close();
         }
 
-        try {
-          await unlink(getOpenCodeCachePath(handle.sessionId));
-        } catch {
-          // best effort cache invalidation
+        const cachePath = getOpenCodeCachePath(handle.sessionId);
+
+        if (cachePath !== undefined) {
+          try {
+            await unlink(cachePath);
+          } catch {
+            // best effort cache invalidation
+          }
         }
 
         return { writes: [databasePath], warnings: [] };

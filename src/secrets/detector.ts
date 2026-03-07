@@ -1,6 +1,6 @@
-import type { SessionHandle, StringFieldRef } from '../providers/types.js';
+import type { StringFieldRef } from '../providers/types.js';
 import { isSecretTypeEnabled, type DetectionOptions } from './options.js';
-import type { DetectionSpan, SessionFinding } from './types.js';
+import type { DetectionSpan } from './types.js';
 import {
   AUTHORIZATION_HEADER_PATTERN,
   BARE_BEARER_TOKEN_PATTERN,
@@ -103,6 +103,18 @@ function dedupeSpans(spans: DetectionSpan[]): DetectionSpan[] {
   return accepted.sort((left, right) => left.start - right.start);
 }
 
+function buildEscapedJsonStringOffsets(value: string): number[] {
+  const offsets = [0];
+  let escapedLength = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    escapedLength += JSON.stringify(value[index] ?? '').slice(1, -1).length;
+    offsets.push(escapedLength);
+  }
+
+  return offsets;
+}
+
 function detectNestedJsonSpans(text: string, detectionOptions?: DetectionOptions): DetectionSpan[] {
   const trimmed = text.trim();
 
@@ -133,22 +145,36 @@ function detectNestedJsonSpans(text: string, detectionOptions?: DetectionOptions
     walk(parsed);
 
     const spans: DetectionSpan[] = [];
+    const nextSearchIndexByEscapedValue = new Map<string, number>();
 
     for (const nestedString of nestedStrings) {
-      for (const nestedSpan of detectSpans(nestedString.value, undefined, detectionOptions)) {
-        const index = text.indexOf(nestedSpan.rawValue);
+      const escapedValue = JSON.stringify(nestedString.value).slice(1, -1);
+      const escapedOffsets = buildEscapedJsonStringOffsets(nestedString.value);
+      const contentIndex = text.indexOf(escapedValue, nextSearchIndexByEscapedValue.get(escapedValue) ?? 0);
 
-        if (index === -1) {
+      if (contentIndex === -1) {
+        continue;
+      }
+
+      nextSearchIndexByEscapedValue.set(escapedValue, contentIndex + escapedValue.length);
+
+      for (const nestedSpan of detectSpans(nestedString.value, undefined, detectionOptions)) {
+        const startOffset = escapedOffsets[nestedSpan.start];
+        const endOffset = escapedOffsets[nestedSpan.end];
+
+        if (startOffset === undefined || endOffset === undefined) {
           continue;
         }
 
-        addSpan(spans, {
+        spans.push({
           type: nestedSpan.type,
-          start: index,
-          end: index + nestedSpan.rawValue.length,
+          start: contentIndex + startOffset,
+          end: contentIndex + endOffset,
           rawValue: nestedSpan.rawValue,
-          replacement: nestedSpan.replacement,
+          replacement: JSON.stringify(nestedSpan.replacement).slice(1, -1),
+          preview: nestedSpan.replacement,
           confidence: nestedSpan.confidence,
+          fingerprint: fingerprintSecret(nestedSpan.rawValue),
         });
       }
     }
@@ -908,23 +934,4 @@ export function buildMaskedValue(
     ),
     findings,
   };
-}
-
-export function findingsForField(
-  handle: SessionHandle,
-  field: StringFieldRef,
-  detectionOptions?: DetectionOptions,
-): SessionFinding[] {
-  return detectSpans(field.value, field.contextKey, detectionOptions).map((span) => ({
-    provider: handle.provider,
-    sessionId: handle.sessionId,
-    type: span.type,
-    fieldId: field.id,
-    fieldPath: field.path,
-    sourceLabel: field.sourceLabel,
-    preview: span.preview,
-    rawSample: span.rawValue,
-    fingerprint: span.fingerprint,
-    maskPolicy: field.maskPolicy,
-  }));
 }

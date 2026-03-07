@@ -1,4 +1,3 @@
-import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { maskSecretsCommand } from './mask_secrets.js';
 import {
@@ -16,6 +15,7 @@ import { createAnalysisAccumulator } from '../secrets/plan.js';
 import type { SecretType } from '../secrets/types.js';
 import type { AgentProvider } from '../providers/types.js';
 import { loadArtifacts, resolveProviderSelection, shouldFailRequestedProvider } from './helpers.js';
+import { ensurePrivateDir, expandHomeDir, writePrivateFile } from '../io/paths.js';
 
 export interface ScanCommandOptions {
   agent?: AgentProvider;
@@ -103,13 +103,13 @@ function printScanOutput(result: ExecutedScan, options: ScanCommandOptions): voi
 }
 
 async function saveScanOutput(result: ExecutedScan, options: ScanCommandOptions): Promise<string> {
-  const directory = resolve(process.cwd(), '.agentwarden-reports');
+  const directory = expandHomeDir('~/.agentwarden/reports');
   const timestamp = new Date().toISOString().replace(/[:]/g, '-');
   const extension = options.json ? 'json' : 'txt';
   const filePath = resolve(directory, `scan-${timestamp}.${extension}`);
 
-  await mkdir(directory, { recursive: true });
-  await writeFile(filePath, `${formatSavedScanOutput(result, options)}\n`, 'utf8');
+  await ensurePrivateDir(directory);
+  await writePrivateFile(filePath, `${formatSavedScanOutput(result, options)}\n`);
 
   return filePath;
 }

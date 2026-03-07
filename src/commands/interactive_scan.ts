@@ -140,6 +140,10 @@ function getBackupRootPattern(): string {
   return `${expandHomeDir('~/.agentwarden/backups')}/<timestamp>-mask_secrets`;
 }
 
+function getReportRootPattern(): string {
+  return expandHomeDir('~/.agentwarden/reports');
+}
+
 function renderMenuLabel(label: string, options: { active: boolean; caution?: boolean; selected: boolean }): string {
   if (options.selected) {
     return paint(label, ANSI_GREEN, ANSI_BOLD);
@@ -767,7 +771,7 @@ export async function promptPostScanAction(): Promise<PostScanAction> {
       {
         label: 'Save to file',
         value: 'save_to_file',
-        description: 'Save the current report to a file in `.agentwarden-reports`.',
+        description: `Save the current report to a file in ${getReportRootPattern()}.`,
       },
       {
         label: 'Skip',

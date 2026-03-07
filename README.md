@@ -43,6 +43,8 @@ Use `--details` when you want the per-session per-type breakdown table.
 Use `--samples` when you want masked example values in the output. Samples are already redacted and usually keep only a safe beginning and ending, like `sk-ant****9xyz`.
 Use `--direct` to skip the interactive wizard.
 
+Saved reports go to `~/.agentwarden/reports`. Agent Warden creates that directory with owner-only permissions. If you choose `--raw-samples`, any saved report will contain those raw values too.
+
 ```bash
 bun run src/index.ts scan
 ```
@@ -101,6 +103,7 @@ bun run src/index.ts scan --direct --json
 
 `mask_secrets` loads sessions, detects findings, and writes masked values back to disk.
 By default it checks all finding types before masking. Use `--dry-run` to preview what would change.
+When backups are enabled, Agent Warden stores them under `~/.agentwarden/backups/<timestamp>-mask_secrets` and writes a `manifest.json` alongside them.
 
 ```bash
 bun run src/index.ts mask_secrets
