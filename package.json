@@ -1,18 +1,26 @@
 {
   "name": "agentwarden",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Agent Warden CLI - A TypeScript CLI application built with Bun and Commander.js",
   "main": "dist/index.js",
-  "module": "src/index.ts",
+  "module": "dist/index.js",
   "type": "module",
   "bin": {
-    "agentwarden": "./dist/index.js"
+    "agentwarden": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "bun build src/index.ts --outdir dist --target bun",
     "start": "bun run src/index.ts",
     "dev": "bun --watch src/index.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "prepublishOnly": "bun run build"
   },
   "keywords": [
     "cli",
