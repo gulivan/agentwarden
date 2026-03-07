@@ -1,18 +1,21 @@
 import type { AgentProvider, MaskPolicy, SessionArtifact, StringFieldRef } from '../providers/types.js';
 
-export type SecretType =
-  | 'secret_assignment'
-  | 'authorization_header'
-  | 'cookie'
-  | 'url_credentials'
-  | 'signed_query'
-  | 'basic_auth'
-  | 'base64_secret'
-  | 'private_key'
-  | 'jwt'
-  | 'raw_token'
-  | 'path_username'
-  | 'email';
+export const SECRET_TYPES = [
+  'secret_assignment',
+  'authorization_header',
+  'cookie',
+  'url_credentials',
+  'signed_query',
+  'basic_auth',
+  'base64_secret',
+  'private_key',
+  'jwt',
+  'raw_token',
+  'path_username',
+  'email',
+] as const;
+
+export type SecretType = (typeof SECRET_TYPES)[number];
 
 export interface DetectionSpan {
   type: SecretType;
@@ -33,6 +36,7 @@ export interface SessionFinding {
   fieldPath: string;
   sourceLabel: string;
   preview: string;
+  rawSample: string;
   fingerprint: string;
   maskPolicy: MaskPolicy;
 }
@@ -49,7 +53,18 @@ export interface FindingGroup {
   type: SecretType;
   count: number;
   previews: string[];
+  rawSamples: string[];
   fingerprints: string[];
+}
+
+export interface SpottedEntry {
+  fingerprint: string;
+  findings: number;
+  previews: string[];
+  rawSamples: string[];
+  providers: AgentProvider[];
+  sessions: number;
+  types: SecretType[];
 }
 
 export interface AnalyzedSession {
@@ -69,5 +84,6 @@ export interface ScanSummary {
 export interface AnalysisResult {
   analyzedSessions: AnalyzedSession[];
   findingGroups: FindingGroup[];
+  spottedEntries: SpottedEntry[];
   summary: ScanSummary;
 }

@@ -22,14 +22,14 @@ export const PRIVATE_KEY_PATTERN = /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?P
 export const JWT_PATTERN = /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g;
 
 export const RAW_TOKEN_PATTERN =
-  /\b(?:sk-[A-Za-z0-9_-]{12,}|sk-proj-[A-Za-z0-9_-]{12,}|anthropic-[A-Za-z0-9_-]{10,}|gh[pousr]_[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})\b/g;
+  /\b(?:sk-[A-Za-z0-9_-]{12,}|sk-proj-[A-Za-z0-9_-]{12,}|sk-ant-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})\b/g;
 
 export const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 
 export const PATH_USERNAME_PATTERNS = [
-  /\/Users\/([^/\s]+)/g,
-  /\/home\/([^/\s]+)/g,
-  /[A-Za-z]:[\\/]+Users[\\/]([^\\/\s]+)/g,
+  /\/Users\/([A-Za-z0-9][A-Za-z0-9._-]{0,63})/g,
+  /\/home\/([A-Za-z0-9][A-Za-z0-9._-]{0,63})/g,
+  /[A-Za-z]:[\\/]+Users[\\/]([A-Za-z0-9][A-Za-z0-9._-]{0,63})/g,
 ];
 
 export const JSON_LIKE_PREFIX = /^[\[{]/;
