@@ -139,8 +139,9 @@ The scan cache stores fingerprints and masked previews only; scans that request 
 
 ## Releasing
 
-Create a GitHub release tagged as `v<package.json version>` to publish to npm automatically.
+Create a GitHub release tagged as `v<package.json version>` to publish to npm automatically, or push the matching Git tag directly.
 Set the repository secret `NPM_TOKEN` first. Pre-releases publish with the npm `next` dist-tag; stable releases publish as `latest`.
+If the same version is already on npm, the publish workflow exits cleanly without trying to republish it.
 
 ## License
 
