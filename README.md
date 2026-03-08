@@ -135,6 +135,7 @@ bun run src/index.ts  # run directly
 
 Set `AGENTWARDEN_DISABLE_RUST_SCANNER=1` to force the TypeScript scanner fallback.
 Set `AGENTWARDEN_DISABLE_SCAN_CACHE=1` to benchmark cold scans, or `AGENTWARDEN_SCAN_CACHE_PATH` to override the cache file location.
+The scan cache stores fingerprints and masked previews only; scans that request raw samples bypass the cache, and cached files are invalidated using file size, timestamps, and a small content probe hash.
 
 ## License
 

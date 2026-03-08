@@ -45,19 +45,20 @@ function getSampleDisplayMode(options: ScanCommandOptions): SampleDisplayMode {
 
 async function executeScan(options: ScanCommandOptions): Promise<ExecutedScan> {
   const requestedProviders = resolveProviderSelection(options);
+  const sampleDisplayMode = getSampleDisplayMode(options);
   const detectionOptions = resolveSecretTypeSelection({
     includeTypes: options.types,
     excludeTypes: options.excludeTypes,
   });
   const accumulator = createAnalysisAccumulator({ retainSessions: false, detectionOptions });
-  const scanCache = await ScanCache.load(detectionOptions);
+  const scanCache = usesRawSamples(sampleDisplayMode) ? undefined : await ScanCache.load(detectionOptions);
   const loaded = await loadArtifacts({
     agent: options.agent,
     agents: options.agents,
     collectArtifacts: false,
     progressLabel: 'scanning',
     onArtifactLoaded: async (artifact) => {
-      const cached = await scanCache.get(artifact.handle);
+      const cached = scanCache === undefined ? undefined : await scanCache.get(artifact.handle);
 
       if (cached !== undefined) {
         accumulator.addSessionAnalysis({
@@ -71,13 +72,13 @@ async function executeScan(options: ScanCommandOptions): Promise<ExecutedScan> {
 
       const analysis = analyzeArtifactForScan(artifact, detectionOptions);
       accumulator.addSessionAnalysis(analysis);
-      await scanCache.set(artifact.handle, {
+      await scanCache?.set(artifact.handle, {
         findings: analysis.findings,
         hasChanges: analysis.hasChanges,
       });
     },
   });
-  await scanCache.persist();
+  await scanCache?.persist();
   const analysis = accumulator.build();
   const report = buildScanReport(analysis, loaded.providers, detectionOptions);
 

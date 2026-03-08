@@ -126,6 +126,9 @@ static TOKEN_WORD_PATTERN: Lazy<Regex> = Lazy::new(|| {
 static TOKEN_ASSIGNMENT_PATTERN: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r###"(?i)(?:^|[\s,{])(token|secret|pass(?:word)?|auth|bearer|basic|api[_-]?key|client[_-]?secret|cookie)\s*[:=]\s*\S{6,}"###).unwrap()
 });
+static CONTEXT_KEY_SECRET_PATTERN: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r###"(?i)(api[_-]?key|token|secret|access[_-]?token|refresh[_-]?token|password|passwd|pwd|authorization|cookie)"###).unwrap()
+});
 static ONLY_ALPHA_NUM_PATTERN: Lazy<Regex> =
     Lazy::new(|| Regex::new(r###"[^A-Za-z0-9]+"###).unwrap());
 
@@ -718,23 +721,25 @@ fn detect_nested_json_spans(
     collect_nested_strings(&parsed, &mut nested_strings);
 
     let mut spans = Vec::new();
-    let mut next_search_index_by_escaped_value: HashMap<String, usize> = HashMap::new();
+    let mut next_search_index_by_serialized_value: HashMap<String, usize> = HashMap::new();
 
     for nested_string in nested_strings {
-        let Ok(serialized) = serde_json::to_string(&nested_string) else {
+        let Ok(serialized_value) = serde_json::to_string(&nested_string) else {
             continue;
         };
-        let escaped_value = serialized[1..serialized.len() - 1].to_string();
         let escaped_offsets = build_escaped_json_string_offsets(&nested_string);
-        let search_index = next_search_index_by_escaped_value
-            .get(&escaped_value)
+        let search_index = next_search_index_by_serialized_value
+            .get(&serialized_value)
             .copied()
             .unwrap_or(0);
-        let Some(content_index) = find_from(text, &escaped_value, search_index) else {
+        let Some(serialized_index) = find_from(text, &serialized_value, search_index) else {
             continue;
         };
-        next_search_index_by_escaped_value
-            .insert(escaped_value.clone(), content_index + escaped_value.len());
+        next_search_index_by_serialized_value.insert(
+            serialized_value.clone(),
+            serialized_index + serialized_value.len(),
+        );
+        let content_index = serialized_index + 1;
         let content_char_index = byte_to_char_index(text, content_index);
 
         for nested_span in detect_spans(&nested_string, None, enabled_types) {
@@ -1062,13 +1067,11 @@ fn detect_spans(
     if spans.is_empty()
         && context_key.is_some()
         && is_type_enabled("secret_assignment", enabled_types)
-        && Regex::new(r"(?i)(api[_-]?key|token|secret|access[_-]?token|refresh[_-]?token|password|passwd|pwd|authorization|cookie)")
-            .unwrap()
-            .is_match(context_key.unwrap_or_default())
+        && CONTEXT_KEY_SECRET_PATTERN.is_match(context_key.unwrap_or_default())
     {
         let trimmed = text.trim();
         if count_chars(trimmed) >= 6
-            && !trimmed.contains(' ')
+            && !trimmed.chars().any(|character| character.is_whitespace())
             && looks_like_sensitive_assignment_value(trimmed)
             && let Some(start_byte) = text.find(trimmed)
         {
@@ -1140,4 +1143,48 @@ pub fn scan_fields_batch(input: String) -> Result<String> {
     serde_json::to_string(&BatchOutput { results }).map_err(|error| {
         napi::Error::from_reason(format!("Unable to serialize scanner response: {error}"))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn context_key_fallback_ignores_tabbed_values() {
+        let spans = detect_spans("abcdefghijkl\tmnopqrst", Some("api_key"), None);
+        assert!(spans.is_empty());
+    }
+
+    #[test]
+    fn nested_json_uses_exact_serialized_string_matches() {
+        let private_key = [
+            "-----BEGIN PRIVATE KEY-----",
+            "ABCDEF1234567890",
+            "-----END PRIVATE KEY-----",
+        ]
+        .join("\n");
+        let nested = serde_json::to_string(&serde_json::json!({ "key": private_key })).unwrap();
+        let value = serde_json::to_string(&serde_json::json!({
+            "prefix": format!("before {nested} after"),
+            "target": nested,
+        }))
+        .unwrap();
+
+        let output = build_masked_value(
+            &FieldInput {
+                context_key: Some("payload".to_string()),
+                value,
+            },
+            None,
+        );
+
+        let parsed: Value = serde_json::from_str(&output.next_value).unwrap();
+        let target = parsed.get("target").and_then(Value::as_str).unwrap();
+        let nested_parsed: Value = serde_json::from_str(target).unwrap();
+
+        assert_eq!(
+            nested_parsed.get("key").and_then(Value::as_str),
+            Some("[PRIVATE KEY REDACTED]")
+        );
+    }
 }

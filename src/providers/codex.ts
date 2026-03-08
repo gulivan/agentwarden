@@ -4,6 +4,8 @@ import { expandHomeDir, pathExists } from '../io/paths.js';
 import { createJsonlArtifact, listFilesRecursive } from './helpers.js';
 import type { ProviderDiscoveryResult, ProviderReader, SessionHandle } from './types.js';
 
+const MAX_FIRST_JSONL_LINE_BYTES = 1024 * 1024;
+
 async function readFirstJsonlLine(filePath: string): Promise<string | undefined> {
   const handle = await open(filePath, 'r');
 
@@ -12,7 +14,7 @@ async function readFirstJsonlLine(filePath: string): Promise<string | undefined>
     let position = 0;
     let collected = '';
 
-    while (position < 1024 * 1024) {
+    while (position < MAX_FIRST_JSONL_LINE_BYTES) {
       const { bytesRead } = await handle.read(buffer, 0, buffer.length, position);
 
       if (bytesRead <= 0) {
@@ -27,6 +29,10 @@ async function readFirstJsonlLine(filePath: string): Promise<string | undefined>
       if (newlineIndex !== -1) {
         return collected.slice(0, newlineIndex).replace(/\r$/, '').trim();
       }
+    }
+
+    if (position >= MAX_FIRST_JSONL_LINE_BYTES && !collected.includes('\n')) {
+      throw new Error(`first JSONL line exceeds ${MAX_FIRST_JSONL_LINE_BYTES} bytes`);
     }
 
     return collected.trim();

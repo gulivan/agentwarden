@@ -148,15 +148,17 @@ function detectNestedJsonSpans(text: string, detectionOptions?: DetectionOptions
     const nextSearchIndexByEscapedValue = new Map<string, number>();
 
     for (const nestedString of nestedStrings) {
-      const escapedValue = JSON.stringify(nestedString.value).slice(1, -1);
+      const serializedValue = JSON.stringify(nestedString.value);
+      const escapedValue = serializedValue.slice(1, -1);
       const escapedOffsets = buildEscapedJsonStringOffsets(nestedString.value);
-      const contentIndex = text.indexOf(escapedValue, nextSearchIndexByEscapedValue.get(escapedValue) ?? 0);
+      const serializedIndex = text.indexOf(serializedValue, nextSearchIndexByEscapedValue.get(serializedValue) ?? 0);
 
-      if (contentIndex === -1) {
+      if (serializedIndex === -1) {
         continue;
       }
 
-      nextSearchIndexByEscapedValue.set(escapedValue, contentIndex + escapedValue.length);
+      nextSearchIndexByEscapedValue.set(serializedValue, serializedIndex + serializedValue.length);
+      const contentIndex = serializedIndex + 1;
 
       for (const nestedSpan of detectSpans(nestedString.value, undefined, detectionOptions)) {
         const startOffset = escapedOffsets[nestedSpan.start];
@@ -902,7 +904,7 @@ export function detectSpans(text: string, contextKey?: string, detectionOptions?
   ) {
     const trimmed = text.trim();
 
-    if (trimmed.length >= 6 && !trimmed.includes(' ') && looksLikeSensitiveAssignmentValue(trimmed)) {
+    if (trimmed.length >= 6 && !/\s/u.test(trimmed) && looksLikeSensitiveAssignmentValue(trimmed)) {
       addSpan(spans, {
         type: 'secret_assignment',
         start: text.indexOf(trimmed),

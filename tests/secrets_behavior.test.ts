@@ -77,6 +77,20 @@ describe('mask planning', () => {
     expect(analysis.summary.sessionsWithChanges).toBe(0);
     expect(analysis.analyzedSessions[0]?.fieldPlans).toHaveLength(0);
   });
+
+  test('does not mask context fallback values that contain tab whitespace', () => {
+    const artifact = createArtifact({
+      value: 'abcdefghijkl\tmnopqrst',
+      contextKey: 'api_key',
+      maskPolicy: 'safe',
+    });
+
+    const analysis = analyzeArtifacts([artifact]);
+
+    expect(analysis.summary.findings).toBe(0);
+    expect(analysis.summary.sessionsWithChanges).toBe(0);
+    expect(analysis.analyzedSessions[0]?.fieldPlans).toHaveLength(0);
+  });
 });
 
 describe('nested JSON masking', () => {
@@ -102,5 +116,20 @@ describe('nested JSON masking', () => {
 
     expect(JSON.parse(parsed.first)).toEqual({ key: '[PRIVATE KEY REDACTED]' });
     expect(JSON.parse(parsed.second)).toEqual({ key: '[PRIVATE KEY REDACTED]' });
+  });
+
+  test('masks the exact nested JSON payload when similar escaped content appears earlier', () => {
+    const privateKey = ['-----BEGIN PRIVATE KEY-----', 'ABCDEF1234567890', '-----END PRIVATE KEY-----'].join('\n');
+    const nested = JSON.stringify({ key: privateKey });
+    const value = JSON.stringify({ prefix: `before ${nested} after`, target: nested });
+    const artifact = createArtifact({ value, contextKey: 'payload' });
+
+    const analysis = analyzeArtifacts([artifact]);
+    const nextValue = analysis.analyzedSessions[0]?.fieldPlans[0]?.nextValue;
+
+    expect(nextValue).toBeDefined();
+
+    const parsed = JSON.parse(nextValue ?? '') as { prefix: string; target: string };
+    expect(JSON.parse(parsed.target)).toEqual({ key: '[PRIVATE KEY REDACTED]' });
   });
 });

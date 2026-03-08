@@ -12,7 +12,7 @@ export interface AnalysisAccumulatorOptions {
 export interface ScanFinding {
   fingerprint: string;
   preview: string;
-  rawSample: string;
+  rawSample?: string;
   type: SessionFinding['type'];
 }
 
@@ -65,6 +65,23 @@ function toSessionFindings(
     fingerprint: span.fingerprint,
     maskPolicy: field.maskPolicy,
   }));
+}
+
+function toScanFinding(finding: Pick<SessionFinding, 'fingerprint' | 'preview' | 'rawSample' | 'type'>): ScanFinding {
+  return {
+    fingerprint: finding.fingerprint,
+    preview: finding.preview,
+    ...(finding.rawSample === undefined ? {} : { rawSample: finding.rawSample }),
+    type: finding.type,
+  };
+}
+
+function pushUniqueRawSample(samples: string[], rawSample?: string): void {
+  if (rawSample === undefined || samples.length >= 3 || samples.includes(rawSample)) {
+    return;
+  }
+
+  samples.push(rawSample);
 }
 
 function canConditionallyMask(fieldValue: string, spans: readonly DetectionSpan[]): boolean {
@@ -124,12 +141,7 @@ export function analyzeArtifactForScan(artifact: SessionArtifact, detectionOptio
   return {
     provider: artifact.handle.provider,
     sessionId: artifact.handle.sessionId,
-    findings: analyzedSession.findings.map((finding) => ({
-      fingerprint: finding.fingerprint,
-      preview: finding.preview,
-      rawSample: finding.rawSample,
-      type: finding.type,
-    })),
+    findings: analyzedSession.findings.map(toScanFinding),
     hasChanges: analyzedSession.fieldPlans.length > 0,
   };
 }
@@ -203,7 +215,7 @@ export function createAnalysisAccumulator(options: AnalysisAccumulatorOptions = 
             type: finding.type,
             count: 1,
             previews: [finding.preview],
-            rawSamples: [finding.rawSample],
+            rawSamples: finding.rawSample === undefined ? [] : [finding.rawSample],
             fingerprints: [finding.fingerprint],
           });
         } else {
@@ -213,9 +225,7 @@ export function createAnalysisAccumulator(options: AnalysisAccumulatorOptions = 
             current.previews.push(finding.preview);
           }
 
-          if (!current.rawSamples.includes(finding.rawSample) && current.rawSamples.length < 3) {
-            current.rawSamples.push(finding.rawSample);
-          }
+          pushUniqueRawSample(current.rawSamples, finding.rawSample);
 
           if (!current.fingerprints.includes(finding.fingerprint)) {
             current.fingerprints.push(finding.fingerprint);
@@ -229,7 +239,7 @@ export function createAnalysisAccumulator(options: AnalysisAccumulatorOptions = 
             fingerprint: finding.fingerprint,
             findings: 1,
             previews: [finding.preview],
-            rawSamples: [finding.rawSample],
+            rawSamples: finding.rawSample === undefined ? [] : [finding.rawSample],
             providers: new Set([analysis.provider]),
             sessions: new Set([`${analysis.provider}:${analysis.sessionId}`]),
             types: new Set([finding.type]),
@@ -243,9 +253,7 @@ export function createAnalysisAccumulator(options: AnalysisAccumulatorOptions = 
           entry.previews.push(finding.preview);
         }
 
-        if (!entry.rawSamples.includes(finding.rawSample) && entry.rawSamples.length < 3) {
-          entry.rawSamples.push(finding.rawSample);
-        }
+        pushUniqueRawSample(entry.rawSamples, finding.rawSample);
 
         entry.providers.add(analysis.provider);
         entry.sessions.add(`${analysis.provider}:${analysis.sessionId}`);
@@ -264,12 +272,7 @@ export function createAnalysisAccumulator(options: AnalysisAccumulatorOptions = 
       addSessionAnalysis({
         provider: artifact.handle.provider,
         sessionId: artifact.handle.sessionId,
-        findings: analyzedSession.findings.map((finding) => ({
-      fingerprint: finding.fingerprint,
-      preview: finding.preview,
-      rawSample: finding.rawSample,
-      type: finding.type,
-    })),
+        findings: analyzedSession.findings.map(toScanFinding),
         hasChanges: analyzedSession.fieldPlans.length > 0,
       });
     },

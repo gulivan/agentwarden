@@ -35,14 +35,24 @@ const nativeModuleCandidates = [
 ];
 
 let cachedNativeModule: NativeScannerModule | null | undefined;
+let overriddenNativeModule: NativeScannerModule | null | undefined;
 
-function containsAstralCodePoint(value: string): boolean {
-  return /[\uD800-\uDBFF][\uDC00-\uDFFF]/.test(value);
+function containsUnsupportedNativeCodeUnit(value: string): boolean {
+  return /[\uD800-\uDFFF]/.test(value);
+}
+
+export function setNativeScannerModuleForTests(module: NativeScannerModule | null | undefined): void {
+  overriddenNativeModule = module;
+  cachedNativeModule = undefined;
 }
 
 function getNativeModule(): NativeScannerModule | undefined {
   if (process.env.AGENTWARDEN_DISABLE_RUST_SCANNER === '1') {
     return undefined;
+  }
+
+  if (overriddenNativeModule !== undefined) {
+    return overriddenNativeModule ?? undefined;
   }
 
   if (cachedNativeModule !== undefined) {
@@ -91,7 +101,7 @@ export function buildMaskedValuesBatch(
   const nativeIndices: number[] = [];
 
   fields.forEach((field, index) => {
-    if (containsAstralCodePoint(field.value)) {
+    if (containsUnsupportedNativeCodeUnit(field.value)) {
       nativeResults[index] = buildMaskedValue(field, detectionOptions);
       return;
     }
