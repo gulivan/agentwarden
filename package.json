@@ -1,6 +1,6 @@
 {
   "name": "agentwarden",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Agent Warden CLI - A TypeScript CLI application built with Bun and Commander.js",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -22,7 +22,8 @@
     "start": "bun run src/index.ts",
     "dev": "bun --watch src/index.ts",
     "test": "bun test",
-    "prepublishOnly": "bun run build"
+    "prepublishOnly": "bun run build",
+    "ci": "bun test && cargo test --manifest-path native/session-scanner/Cargo.toml && bun run build && npm pack --dry-run"
   },
   "keywords": [
     "cli",
