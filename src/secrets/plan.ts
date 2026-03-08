@@ -1,5 +1,5 @@
 import type { SessionArtifact, StringFieldRef } from '../providers/types.js';
-import { buildMaskedValue } from './detector.js';
+import { buildMaskedValuesBatch } from './native.js';
 import type { DetectionOptions } from './options.js';
 import type { DetectionSpan } from './types.js';
 import type { AnalysisResult, AnalyzedSession, FindingGroup, SessionFinding, SpottedEntry } from './types.js';
@@ -9,8 +9,23 @@ export interface AnalysisAccumulatorOptions {
   detectionOptions?: DetectionOptions;
 }
 
+export interface ScanFinding {
+  fingerprint: string;
+  preview: string;
+  rawSample: string;
+  type: SessionFinding['type'];
+}
+
+export interface ScanSessionAnalysis {
+  findings: ScanFinding[];
+  hasChanges: boolean;
+  provider: SessionFinding['provider'];
+  sessionId: string;
+}
+
 export interface AnalysisAccumulator {
   addArtifact(artifact: SessionArtifact): void;
+  addSessionAnalysis(analysis: ScanSessionAnalysis): void;
   build(): AnalysisResult;
 }
 
@@ -79,10 +94,16 @@ function shouldCreateFieldPlan(field: StringFieldRef, spans: readonly DetectionS
   return true;
 }
 
-function analyzeArtifact(artifact: SessionArtifact, detectionOptions?: DetectionOptions): AnalyzedSession {
+export function analyzeArtifact(artifact: SessionArtifact, detectionOptions?: DetectionOptions): AnalyzedSession {
   const findings: SessionFinding[] = [];
-  const fieldPlans = artifact.fields.flatMap((field) => {
-    const maskedField = buildMaskedValue(field, detectionOptions);
+  const maskedFields = buildMaskedValuesBatch(artifact.fields, detectionOptions);
+  const fieldPlans = artifact.fields.flatMap((field, index) => {
+    const maskedField = maskedFields[index];
+
+    if (maskedField === undefined) {
+      return [];
+    }
+
     const fieldFindings = toSessionFindings(artifact, field, maskedField.findings);
     findings.push(...fieldFindings);
 
@@ -94,6 +115,23 @@ function analyzeArtifact(artifact: SessionArtifact, detectionOptions?: Detection
   });
 
   return { artifact, findings, fieldPlans };
+}
+
+
+export function analyzeArtifactForScan(artifact: SessionArtifact, detectionOptions?: DetectionOptions): ScanSessionAnalysis {
+  const analyzedSession = analyzeArtifact(artifact, detectionOptions);
+
+  return {
+    provider: artifact.handle.provider,
+    sessionId: artifact.handle.sessionId,
+    findings: analyzedSession.findings.map((finding) => ({
+      fingerprint: finding.fingerprint,
+      preview: finding.preview,
+      rawSample: finding.rawSample,
+      type: finding.type,
+    })),
+    hasChanges: analyzedSession.fieldPlans.length > 0,
+  };
 }
 
 function sortFindingGroups(groups: Iterable<FindingGroup>): FindingGroup[] {
@@ -137,38 +175,31 @@ export function createAnalysisAccumulator(options: AnalysisAccumulatorOptions = 
     providers: createProviderSummary(),
   };
 
-  return {
-    addArtifact(artifact) {
-      const analyzedSession = analyzeArtifact(artifact, options.detectionOptions);
+  const addSessionAnalysis = (analysis: ScanSessionAnalysis): void => {
+    const providerSummary = summary.providers[analysis.provider];
+    providerSummary.sessions += 1;
+    providerSummary.findings += analysis.findings.length;
 
-      if (retainSessions) {
-        analyzedSessions.push(analyzedSession);
-      }
+    if (analysis.findings.length > 0) {
+      summary.sessionsWithFindings += 1;
+    }
 
-      const providerSummary = summary.providers[artifact.handle.provider];
-      providerSummary.sessions += 1;
-      providerSummary.findings += analyzedSession.findings.length;
+    if (analysis.hasChanges) {
+      providerSummary.changes += 1;
+      summary.sessionsWithChanges += 1;
+    }
 
-      if (analyzedSession.findings.length > 0) {
-        summary.sessionsWithFindings += 1;
-      }
+    summary.sessions += 1;
+    summary.findings += analysis.findings.length;
 
-      if (analyzedSession.fieldPlans.length > 0) {
-        providerSummary.changes += 1;
-        summary.sessionsWithChanges += 1;
-      }
-
-      summary.sessions += 1;
-      summary.findings += analyzedSession.findings.length;
-
-      for (const finding of analyzedSession.findings) {
-        const key = `${finding.provider}:${finding.sessionId}:${finding.type}`;
+    for (const finding of analysis.findings) {
+        const key = `${analysis.provider}:${analysis.sessionId}:${finding.type}`;
         const current = groupMap.get(key);
 
         if (current === undefined) {
           groupMap.set(key, {
-            provider: finding.provider,
-            sessionId: finding.sessionId,
+            provider: analysis.provider,
+            sessionId: analysis.sessionId,
             type: finding.type,
             count: 1,
             previews: [finding.preview],
@@ -199,8 +230,8 @@ export function createAnalysisAccumulator(options: AnalysisAccumulatorOptions = 
             findings: 1,
             previews: [finding.preview],
             rawSamples: [finding.rawSample],
-            providers: new Set([finding.provider]),
-            sessions: new Set([`${finding.provider}:${finding.sessionId}`]),
+            providers: new Set([analysis.provider]),
+            sessions: new Set([`${analysis.provider}:${analysis.sessionId}`]),
             types: new Set([finding.type]),
           });
           continue;
@@ -216,11 +247,33 @@ export function createAnalysisAccumulator(options: AnalysisAccumulatorOptions = 
           entry.rawSamples.push(finding.rawSample);
         }
 
-        entry.providers.add(finding.provider);
-        entry.sessions.add(`${finding.provider}:${finding.sessionId}`);
+        entry.providers.add(analysis.provider);
+        entry.sessions.add(`${analysis.provider}:${analysis.sessionId}`);
         entry.types.add(finding.type);
       }
+    };
+
+  return {
+    addArtifact(artifact) {
+      const analyzedSession = analyzeArtifact(artifact, options.detectionOptions);
+
+      if (retainSessions) {
+        analyzedSessions.push(analyzedSession);
+      }
+
+      addSessionAnalysis({
+        provider: artifact.handle.provider,
+        sessionId: artifact.handle.sessionId,
+        findings: analyzedSession.findings.map((finding) => ({
+      fingerprint: finding.fingerprint,
+      preview: finding.preview,
+      rawSample: finding.rawSample,
+      type: finding.type,
+    })),
+        hasChanges: analyzedSession.fieldPlans.length > 0,
+      });
     },
+    addSessionAnalysis,
     build() {
       return {
         analyzedSessions,

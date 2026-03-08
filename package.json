@@ -10,13 +10,15 @@
   },
   "files": [
     "dist",
+    "vendor",
     "README.md"
   ],
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target bun",
+    "build:native": "bun run scripts/build_native.ts",
+    "build": "bun run build:native && bun build src/index.ts --outdir dist --target bun",
     "start": "bun run src/index.ts",
     "dev": "bun --watch src/index.ts",
     "test": "bun test",

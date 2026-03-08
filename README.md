@@ -127,10 +127,14 @@ By default all types are checked. Use `--types` or `--exclude-types` to filter.
 
 ```bash
 bun install
+bun run build:native  # compile the current-platform Rust scanner
 bun run dev           # watch mode
 bun run build         # production build
 bun run src/index.ts  # run directly
 ```
+
+Set `AGENTWARDEN_DISABLE_RUST_SCANNER=1` to force the TypeScript scanner fallback.
+Set `AGENTWARDEN_DISABLE_SCAN_CACHE=1` to benchmark cold scans, or `AGENTWARDEN_SCAN_CACHE_PATH` to override the cache file location.
 
 ## License
 

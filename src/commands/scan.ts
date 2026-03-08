@@ -11,10 +11,11 @@ import { buildScanReport } from '../reporting/scan_report.js';
 import { formatScanTable, formatSpottedEntryTable } from '../reporting/scan_table.js';
 import { resolveSampleDisplayMode, usesRawSamples, type SampleDisplayMode } from '../reporting/sample_display.js';
 import { resolveSecretTypeSelection } from '../secrets/options.js';
-import { createAnalysisAccumulator } from '../secrets/plan.js';
+import { analyzeArtifactForScan, createAnalysisAccumulator } from '../secrets/plan.js';
 import type { SecretType } from '../secrets/types.js';
 import type { AgentProvider } from '../providers/types.js';
 import { loadArtifacts, resolveProviderSelection, shouldFailRequestedProvider } from './helpers.js';
+import { ScanCache } from '../io/scan_cache.js';
 import { ensurePrivateDir, expandHomeDir, writePrivateFile } from '../io/paths.js';
 
 export interface ScanCommandOptions {
@@ -49,13 +50,34 @@ async function executeScan(options: ScanCommandOptions): Promise<ExecutedScan> {
     excludeTypes: options.excludeTypes,
   });
   const accumulator = createAnalysisAccumulator({ retainSessions: false, detectionOptions });
+  const scanCache = await ScanCache.load(detectionOptions);
   const loaded = await loadArtifacts({
     agent: options.agent,
     agents: options.agents,
     collectArtifacts: false,
     progressLabel: 'scanning',
-    onArtifactLoaded: (artifact) => accumulator.addArtifact(artifact),
+    onArtifactLoaded: async (artifact) => {
+      const cached = await scanCache.get(artifact.handle);
+
+      if (cached !== undefined) {
+        accumulator.addSessionAnalysis({
+          provider: artifact.handle.provider,
+          sessionId: artifact.handle.sessionId,
+          findings: cached.findings,
+          hasChanges: cached.hasChanges,
+        });
+        return;
+      }
+
+      const analysis = analyzeArtifactForScan(artifact, detectionOptions);
+      accumulator.addSessionAnalysis(analysis);
+      await scanCache.set(artifact.handle, {
+        findings: analysis.findings,
+        hasChanges: analysis.hasChanges,
+      });
+    },
   });
+  await scanCache.persist();
   const analysis = accumulator.build();
   const report = buildScanReport(analysis, loaded.providers, detectionOptions);
 

@@ -29,6 +29,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .eslintcache
 .cache
 *.tsbuildinfo
+vendor
+native/session-scanner/target
+native/session-scanner/index.node
 
 # IntelliJ based IDEs
 .idea

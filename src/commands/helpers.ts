@@ -12,7 +12,7 @@ export interface ProviderSelectionOptions {
 export interface LoadArtifactsOptions extends ProviderSelectionOptions {
   collectArtifacts?: boolean;
   progressLabel?: string;
-  onArtifactLoaded?: (artifact: SessionArtifact) => void;
+  onArtifactLoaded?: (artifact: SessionArtifact) => void | Promise<void>;
 }
 
 export interface LoadedArtifactsResult {
@@ -217,7 +217,7 @@ export async function loadArtifacts(options: LoadArtifactsOptions = {}): Promise
               providerArtifacts[currentIndex] = artifact;
             }
 
-            options.onArtifactLoaded?.(artifact);
+            await options.onArtifactLoaded?.(artifact);
             warnings.push(...artifact.warnings);
           } catch (error) {
             errors.push({
