@@ -5,7 +5,7 @@ import { expandHomeDir } from '../io/paths.js';
 import { type SampleDisplayMode } from '../reporting/sample_display.js';
 import { getProviderReaders } from '../providers/index.js';
 import { AGENT_PROVIDERS, type AgentProvider } from '../providers/types.js';
-import { getSecretTypeDefinition, SECRET_TYPE_GROUPS } from '../secrets/catalog.js';
+import { DEFAULT_SCAN_TYPES, getSecretTypeDefinition, SECRET_TYPE_GROUPS } from '../secrets/catalog.js';
 import { formatSecretTypes } from '../secrets/options.js';
 import { SECRET_TYPES, type SecretType } from '../secrets/types.js';
 import { formatProviderSelection } from './helpers.js';
@@ -573,7 +573,7 @@ function getSecretDetails(item: SecretMenuItem, selectedTypes: ReadonlySet<Secre
 }
 
 async function promptSecretTypeSelection(defaults?: SecretType[]): Promise<SecretType[] | undefined> {
-  const selectedTypes = new Set<SecretType>(defaults ?? SECRET_TYPES);
+  const selectedTypes = new Set<SecretType>(defaults ?? DEFAULT_SCAN_TYPES);
   let cursorIndex = 0;
 
   return await runRawMenu<SecretType[]>(

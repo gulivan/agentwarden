@@ -182,6 +182,12 @@ export function formatSecretFilterChoices(): string {
   return [...SECRET_TYPE_GROUPS.map((group) => group.id), ...SECRET_TYPES].join(', ');
 }
 
+export const USER_DATA_TYPES = new Set<SecretType>(
+  SECRET_TYPE_GROUPS.find((group) => group.id === 'user_data')?.types ?? [],
+);
+
+export const DEFAULT_SCAN_TYPES: readonly SecretType[] = SECRET_TYPES.filter((type) => !USER_DATA_TYPES.has(type));
+
 export function getSecretTypeDefinition(type: SecretType): SecretTypeDefinition {
   return SECRET_TYPE_DEFINITIONS[type];
 }

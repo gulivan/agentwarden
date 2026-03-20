@@ -34,16 +34,22 @@ function normalizeSample(sample: string): string {
   return compact.length > 96 ? `${compact.slice(0, 93)}...` : compact;
 }
 
+function isAlreadyMasked(sample: string): boolean {
+  return sample.includes('****');
+}
+
 function formatSample(group: FindingGroup, sampleDisplayMode: SampleDisplayMode): string {
   const samples = sampleDisplayMode === 'raw' ? group.rawSamples : group.previews;
   const sample = samples[0];
-  return sample === undefined ? '-' : normalizeSample(sample);
+  if (sample === undefined || isAlreadyMasked(sample)) return '-';
+  return normalizeSample(sample);
 }
 
 function formatEntrySample(entry: ScanEntrySummary, sampleDisplayMode: SampleDisplayMode): string {
   const samples = sampleDisplayMode === 'raw' ? entry.rawSamples : entry.previews;
   const sample = samples[0];
-  return sample === undefined ? '-' : normalizeSample(sample);
+  if (sample === undefined || isAlreadyMasked(sample)) return '-';
+  return normalizeSample(sample);
 }
 
 export function formatSpottedEntryTable(
@@ -51,10 +57,14 @@ export function formatSpottedEntryTable(
   sampleDisplayMode: SampleDisplayMode,
   options: { limit?: number } = {},
 ): string {
-  const entries = options.limit === undefined ? report.byEntry : report.byEntry.slice(0, options.limit);
+  const allEntries = report.byEntry.filter((entry) => {
+    const samples = sampleDisplayMode === 'raw' ? entry.rawSamples : entry.previews;
+    return !samples.every((sample) => isAlreadyMasked(sample));
+  });
+  const entries = options.limit === undefined ? allEntries : allEntries.slice(0, options.limit);
   const lines = ['spotted entries:'];
 
-  if (report.byEntry.length === 0) {
+  if (allEntries.length === 0) {
     lines.push('no secrets detected');
     return lines.join('\n');
   }
@@ -73,8 +83,8 @@ export function formatSpottedEntryTable(
     ),
   );
 
-  if (options.limit !== undefined && report.byEntry.length > options.limit) {
-    lines.push('', `more hidden: ${report.byEntry.length - options.limit} entries`);
+  if (options.limit !== undefined && allEntries.length > options.limit) {
+    lines.push('', `more hidden: ${allEntries.length - options.limit} entries`);
   }
 
   return lines.join('\n');
